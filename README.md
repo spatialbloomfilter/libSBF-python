@@ -16,7 +16,7 @@ For more details on the implementation, and how to use the library please refer 
 
 The library and the test application can be tested using the [sample datasets](https://github.com/spatialbloomfilter/libSBF-testdatasets "libSBF-testdatasets") provided in a separate repository.
 
-A [C++ implementation](https://github.com/spatialbloomfilter/libSFB-cpp "libSFB-cpp") is also available. 
+A [C++ implementation](https://github.com/spatialbloomfilter/libSBF-cpp "libSBF-cpp") is also available. 
 
 ## Bibliography ##
 The SBFs have been proposed in the following research papers:
