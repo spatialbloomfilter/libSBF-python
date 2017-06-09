@@ -546,8 +546,9 @@ class sbf:
         print('Filter details:')
         print(' - Number of cells: ' + str(self.num_cells))
         print(' - Size in bytes: ' + str(self.cell_size * self.num_cells))
-        print(' - Filter sparsity: ' + str(round(self.filter_sparsity(), self.precision)))
-        print(' - Filter fpp: ' + str(round(self.filter_fpp(), self.precision)))
+        print(' - Filter sparsity: ' + str('{:.{prec}f}'.format(round(self.filter_sparsity(), self.precision), prec=self.precision)))
+        print(' - Filter a-priori fpp: ' + str('{:.{prec}f}'.format(round(self.filter_apriori_fpp(), self.precision), prec=self.precision)))
+        print(' - Filter fpp: ' + str('{:.{prec}f}'.format(round(self.filter_fpp(), self.precision), prec=self.precision)))
         print(' - Number of mapped elements: ' + str(self.members))
         print(' - Number of hash collisions: ' + str(self.collisions))
 
@@ -566,15 +567,22 @@ class sbf:
         print('----------------')
         for self.j in range(1, self.num_areas + 1):
             self.potential_elements = (self.area_members[self.j] * self.num_hashes) - self.area_self_collisions[self.j]
-            print('Area ' + str(self.j).rjust(3) + ': ' + str(self.area_members[self.j]) + ' members, ' + str(self.area_cells[self.j]) + ' cells out of ' + str(self.potential_elements) + ' potential (' + str(self.area_self_collisions[self.j]) + ' self-collisions)')
+            print('Area ' + str(self.j).rjust(len(str(self.num_areas))) + ': ' \
+                  + str(self.area_members[self.j]) + ' members, ' \
+                  + str(self.area_cells[self.j]) + ' cells out of ' \
+                  + str(self.potential_elements) + ' potential (' \
+                  + str(self.area_self_collisions[self.j]) + ' self-collisions)')
 
-        print('\nEmersion and Fpp:\n')
+        print('\nEmersion, FPP and ISEP:\n')
         self.compute_area_fpp()
+        self.compute_apriori_area_fpp()
+        self.compute_apriori_area_isep()
         for self.j in range(1, self.num_areas + 1):
-            if (self.area_flotation(self.j)):
-                print('Area ' + str(self.j) + ': emersion ' + str(round(self.area_emersion(self.j), self.precision)) + ', flotation safe, fpp ' + str(round(self.area_fpp[self.j], self.precision)))
-            else:
-                print('Area ' + str(self.j) + ': emersion ' + str(round(self.area_emersion(self.j), self.precision)) + ', flotation unsafe, fpp ' + str(round(self.area_fpp[self.j], self.precision)))
+            print('Area ' + str(self.j).rjust(len(str(self.num_areas))) + \
+                  ': emersion ' + str('{:.{prec}f}'.format(round(self.area_emersion(self.j), self.precision), prec=self.precision)) + \
+                  ', a-priori fpp ' + str('{:.{prec}f}'.format(round(self.area_apriori_fpp[self.j], self.precision), prec=self.precision)) + \
+                  ', fpp ' + str('{:.{prec}f}'.format(round(self.area_fpp[self.j], self.precision), prec=self.precision)) + \
+                  ', a-priori isep ' + str('{:.{prec}f}'.format(round(self.area_apriori_isep[self.j], self.precision), prec=self.precision)))
 
         del self.j
         del self.mode
@@ -584,13 +592,13 @@ class sbf:
     def save_filter(self, filter_path, mode, precision = 5):
         """ Saves the filter and related statistics onto a CSV file.
 
-        Saves to disk the filter and related statistics (according to the specified
+        Saves to disk the filter or its statistics (according to the specified
         operation mode) to the specified path.
 
         Args:
             filter_path:    the path to the file where to store the filter
                             information.
-            mode:           If 0, writes the SBF metadata only (CSV: key,value);
+            mode:           If 0, writes the SBF metadata (CSV: key,value);
                             if 1, writes the SBF cells (CSV: value).
             precision:      Sets the precision (number of decimal places) to use
                             when printing float values.
@@ -619,14 +627,24 @@ class sbf:
                     self.filter_file.write("byte_size" + ";" + str(self.cell_size*self.num_cells) + "\n")
                     self.filter_file.write("members" + ";" + str(self.members) + "\n")
                     self.filter_file.write("collisions" + ";" + str(self.collisions) + "\n")
-                    self.filter_file.write("sparsity" + ";" + str(round(self.filter_sparsity(), self.precision)) + "\n")
-                    self.filter_file.write("fpp" + ";" + str(round(self.filter_fpp(), self.precision)) + "\n")
+                    self.filter_file.write("sparsity" + ";" + str('{:.{prec}f}'.format(round(self.filter_sparsity(), self.precision), prec=self.precision)) + "\n")
+                    self.filter_file.write("a-priori fpp" + ";" + str('{:.{prec}f}'.format(round(self.filter_apriori_fpp(), self.precision), prec=self.precision)) + "\n")
+                    self.filter_file.write("fpp" + ";" + str('{:.{prec}f}'.format(round(self.filter_fpp(), self.precision), prec=self.precision)) + "\n")
 
                     # area-related parameters:
-                    # area,members,self-collisions,cells,emersion,flotation,fpp
+                    # area, members, self-collisions, cells, emersion, apriori_fpp, fpp, apriori_isep
                     self.compute_area_fpp()
+                    self.compute_apriori_area_fpp()
+                    self.compute_apriori_area_isep()
                     for self.j in range(1, self.num_areas+1):
-                        self.filter_file.write(str(self.j) + ";" + str(self.area_members[self.j]) + ";" + str(self.area_self_collisions[self.j]) + ";" + str(self.area_cells[self.j]) + ";" + str(round(self.area_emersion(self.j), self.precision)) + ";" + str(self.area_flotation(self.j)) + ";" + str(round(self.area_fpp[self.j], self.precision)) + "\n")
+                        self.filter_file.write(str(self.j) + ";" + \
+                                               str(self.area_members[self.j]) + ";" + \
+                                               str(self.area_self_collisions[self.j]) + ";" + \
+                                               str(self.area_cells[self.j]) + ";" + \
+                                               str('{:.{prec}f}'.format(round(self.area_emersion(self.j), self.precision), prec=self.precision)) + ";" + \
+                                               str('{:.{prec}f}'.format(round(self.area_apriori_fpp[self.j], self.precision), prec=self.precision)) + ";" + \
+                                               str('{:.{prec}f}'.format(round(self.area_fpp[self.j], self.precision), prec=self.precision)) + ";" + \
+                                               str('{:.{prec}f}'.format(round(self.area_apriori_isep[self.j], self.precision), prec=self.precision)) + "\n")
 
                     del self.j
 
@@ -659,7 +677,7 @@ class sbf:
         the filter statistics).
 
         Returns:
-            The list of false positives probability (fpp) for the areas.
+            The list of a-posteriori false positives probability (fpp) for the areas.
         """
 
         self.area_fpp = [0]*(self.num_areas + 1)
@@ -688,6 +706,90 @@ class sbf:
         return self.area_fpp
 
 
+    def compute_apriori_area_fpp(self):
+        """ Computes a-priori false positives probability for each area.
+
+        Computes the a-priori false positives probability (fpp) for each
+        area. This method needs to be called manually after the last insert
+        operation in order to generate the statistics correctly. Alternatively,
+        it is called by both the print_filter and the save_filter (when saving
+        the filter statistics).
+
+        Returns:
+            The list of a-priori false positives probability (fpp) for the areas.
+        """
+
+        self.area_apriori_fpp = [0]*(self.num_areas + 1)
+
+        for self.i in range(self.num_areas, 0, -1):
+
+            self.c = 0
+            self.p = 0
+
+            for self.j in range(self.i, self.num_areas+1):
+                self.c += self.area_members[self.j]
+
+            self.p = 1 - (1  / self.num_cells)
+
+            self.p = 1 - pow(self.p, (self.num_hashes * self.c))
+
+            self.p = pow(self.p, self.num_hashes)
+
+            self.area_apriori_fpp[self.i] = self.p
+
+            for self.j in range(self.i, self.num_areas):
+                self.area_apriori_fpp[self.i] -= self.area_apriori_fpp[self.j + 1]
+
+            if (self.area_apriori_fpp[self.i] < 0):
+                self.area_apriori_fpp[self.i] = 0
+
+        del self.j
+        del self.c
+        del self.p
+        del self.i
+
+        return self.area_apriori_fpp
+
+
+    def compute_apriori_area_isep(self):
+        """ Computes a-priori inter-set error probability for each area.
+
+        Computes the a-priori inter-set error probability (isep) for each
+        area. This method needs to be called manually after the last insert
+        operation in order to generate the statistics correctly. Alternatively,
+        it is called by both the print_filter and the save_filter (when saving
+        the filter statistics).
+
+        Returns:
+            The list of a-priori inter-set error probability (isep) for the areas.
+        """
+
+        self.area_apriori_isep = [0]*(self.num_areas + 1)
+
+        for self.i in range(self.num_areas, 0, -1):
+
+            self.nfill = 0
+            self.p = 0
+
+            for self.j in range(self.i+1, self.num_areas+1):
+                self.nfill += self.area_members[self.j]
+
+            self.p = 1 - (1  / self.num_cells)
+
+            self.p = 1 - pow(self.p, (self.num_hashes * self.nfill))
+
+            self.p = pow(self.p, self.num_hashes)
+
+            self.area_apriori_isep[self.i] = self.p
+
+        del self.nfill
+        del self.p
+        del self.i
+        del self.j
+
+        return self.area_apriori_isep
+
+
     def filter_sparsity(self):
         """ Returns the sparsity of the SBF.
 
@@ -713,10 +815,10 @@ class sbf:
         filter (i.e. not area-specific).
 
         Returns:
-            The filter false positives probability (fpp).
+            The filter a-posteriori false positives probability (fpp).
         """
 
-        self.c =0
+        self.c = 0
 
         # Counts non-zero cells
         for self.i in range(1, self.num_areas + 1):
@@ -725,6 +827,25 @@ class sbf:
         self.p = self.c / self.num_cells
 
         return pow(self.p, self.num_hashes)
+
+
+    def filter_apriori_fpp(self):
+        """ Computes a-priori false positives probability for the filter.
+
+        Computes the a-priori false positive probability over the entire
+        filter (i.e. not area-specific).
+
+        Returns:
+            The filter a-priori false positives probability (fpp).
+        """
+
+        self.p = 1 - (1 / self.num_cells)
+
+        self.p = 1 - pow(self.p, (self.num_hashes * self.members))
+
+        self.p = pow(self.p, self.num_hashes)
+
+        return self.p
 
 
     def area_emersion(self, area):
@@ -750,23 +871,3 @@ class sbf:
             return -1
         else:
             return (self.area_cells[self.area] / ((self.area_members[self.area] * self.num_hashes) - self.area_self_collisions[self.area]))
-
-
-    def area_flotation(self, area):
-        """ Computes the flotation value for an area.
-
-        Computes the flotation value for the input area. The flotation is True if
-        it is not possible for an element belonging to the area to be recognized
-        as belonging to a different area, False if collisions may cause this to
-        happen.
-
-        Returns:
-            The flotation value (boolean).
-        """
-
-        self.area = area
-
-        if (self.area_members[self.area] == 0):
-            return True
-        else:
-            return (self.area_members[self.area] * self.num_hashes) - self.area_self_collisions[self.area] - self.area_cells[self.area] < self.num_hashes
