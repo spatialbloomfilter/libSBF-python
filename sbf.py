@@ -565,10 +565,12 @@ class sbf:
         print('\n')
         print('Area properties:')
         print('----------------')
+        self.expected_area_cells()
         for self.j in range(1, self.num_areas + 1):
             self.potential_elements = (self.area_members[self.j] * self.num_hashes) - self.area_self_collisions[self.j]
             print('Area ' + str(self.j).rjust(len(str(self.num_areas))) + ': ' \
                   + str(self.area_members[self.j]) + ' members, ' \
+                  + str('{:.{prec}f}'.format(round(self.area_expected_cells[self.j], self.precision), prec=self.precision)) + ' expected cells, ' \
                   + str(self.area_cells[self.j]) + ' cells out of ' \
                   + str(self.potential_elements) + ' potential (' \
                   + str(self.area_self_collisions[self.j]) + ' self-collisions)')
@@ -577,12 +579,16 @@ class sbf:
         self.compute_area_fpp()
         self.compute_apriori_area_fpp()
         self.compute_apriori_area_isep()
+        self.compute_area_isep()
         for self.j in range(1, self.num_areas + 1):
             print('Area ' + str(self.j).rjust(len(str(self.num_areas))) + \
-                  ': emersion ' + str('{:.{prec}f}'.format(round(self.area_emersion(self.j), self.precision), prec=self.precision)) + \
+                  ': expected emersion ' + str('{:.{prec}f}'.format(round(self.expected_area_emersion(self.j), self.precision), prec=self.precision)) + \
+                  ', emersion ' + str('{:.{prec}f}'.format(round(self.area_emersion(self.j), self.precision), prec=self.precision)) + \
                   ', a-priori fpp ' + str('{:.{prec}f}'.format(round(self.area_apriori_fpp[self.j], self.precision), prec=self.precision)) + \
                   ', fpp ' + str('{:.{prec}f}'.format(round(self.area_fpp[self.j], self.precision), prec=self.precision)) + \
-                  ', a-priori isep ' + str('{:.{prec}f}'.format(round(self.area_apriori_isep[self.j], self.precision), prec=self.precision)))
+                  ', a-priori isep ' + str('{:.{prec}f}'.format(round(self.area_apriori_isep[self.j], self.precision), prec=self.precision)) + \
+                  ', expected ise ' + str('{:.{prec}f}'.format(round((self.area_apriori_isep[self.j] * self.area_members[self.j]), self.precision), prec=self.precision)) + \
+                  ', isep ' + str('{:.{prec}f}'.format(round(self.area_isep[self.j], self.precision), prec=self.precision)))
 
         del self.j
         del self.mode
@@ -630,21 +636,28 @@ class sbf:
                     self.filter_file.write("sparsity" + ";" + str('{:.{prec}f}'.format(round(self.filter_sparsity(), self.precision), prec=self.precision)) + "\n")
                     self.filter_file.write("a-priori fpp" + ";" + str('{:.{prec}f}'.format(round(self.filter_apriori_fpp(), self.precision), prec=self.precision)) + "\n")
                     self.filter_file.write("fpp" + ";" + str('{:.{prec}f}'.format(round(self.filter_fpp(), self.precision), prec=self.precision)) + "\n")
+                    self.filter_file.write("area;members;expected cells;self-collisions;cells;expected emersion;emersion;a-priori fpp;fpp;a-priori isep;expected ise;isep\n")
 
                     # area-related parameters:
-                    # area, members, self-collisions, cells, emersion, apriori_fpp, fpp, apriori_isep
+                    # area, members, expected cells, self-collisions, cells, expected emersion, emersion, apriori_fpp, fpp, apriori_isep, expected ise, isep
                     self.compute_area_fpp()
                     self.compute_apriori_area_fpp()
                     self.compute_apriori_area_isep()
+                    self.compute_area_isep()
+                    self.expected_area_cells()
                     for self.j in range(1, self.num_areas+1):
                         self.filter_file.write(str(self.j) + ";" + \
                                                str(self.area_members[self.j]) + ";" + \
+                                               str('{:.{prec}f}'.format(round(self.area_expected_cells[self.j], self.precision), prec=self.precision)) + ";" + \
                                                str(self.area_self_collisions[self.j]) + ";" + \
                                                str(self.area_cells[self.j]) + ";" + \
+                                               str('{:.{prec}f}'.format(round(self.expected_area_emersion(self.j), self.precision), prec=self.precision)) + ";" + \
                                                str('{:.{prec}f}'.format(round(self.area_emersion(self.j), self.precision), prec=self.precision)) + ";" + \
                                                str('{:.{prec}f}'.format(round(self.area_apriori_fpp[self.j], self.precision), prec=self.precision)) + ";" + \
                                                str('{:.{prec}f}'.format(round(self.area_fpp[self.j], self.precision), prec=self.precision)) + ";" + \
-                                               str('{:.{prec}f}'.format(round(self.area_apriori_isep[self.j], self.precision), prec=self.precision)) + "\n")
+                                               str('{:.{prec}f}'.format(round(self.area_apriori_isep[self.j], self.precision), prec=self.precision)) + ";" + \
+                                               str('{:.{prec}f}'.format(round((self.area_apriori_isep[self.j] * self.area_members[self.j]), self.precision), prec=self.precision)) + ";" + \
+                                               str('{:.{prec}f}'.format(round(self.area_isep[self.j], self.precision), prec=self.precision)) + "\n")
 
                     del self.j
 
@@ -751,6 +764,46 @@ class sbf:
         return self.area_apriori_fpp
 
 
+    def expected_area_cells(self):
+        """ Computes the expected number of cells for each area
+
+        Computes the expected number of cells for each area. The expected value
+        depends only on the filter properties (size, number of hash functions,
+        number of sets and elements, etc.) and not an actual instance of the
+        filter.
+
+        Returns:
+            The list of expected number of cells for the areas.
+        """
+
+        self.area_expected_cells = [0]*(self.num_areas + 1)
+
+        for self.i in range(self.num_areas, 0, -1):
+
+            self.nfill = 0
+
+            for self.j in range(self.i+1, self.num_areas+1):
+                self.nfill += self.area_members[self.j]
+
+            self.p1 = 1 - (1  / self.num_cells)
+
+            self.p2 = pow(self.p1, (self.num_hashes * self.nfill))
+
+            self.p1 = 1 - pow(self.p1, (self.num_hashes * self.area_members[self.i]))
+
+            self.p1 = self.num_cells * self.p1 * self.p2
+
+            self.area_expected_cells[self.i] = self.p1
+
+        del self.nfill
+        del self.p1
+        del self.p2
+        del self.i
+        del self.j
+
+        return self.area_expected_cells
+
+
     def compute_apriori_area_isep(self):
         """ Computes a-priori inter-set error probability for each area.
 
@@ -788,6 +841,33 @@ class sbf:
         del self.j
 
         return self.area_apriori_isep
+
+
+    def compute_area_isep(self):
+        """ Computes a-posteriori inter-set error probability for each area.
+
+        Computes the a-posteriori inter-set error probability (isep) for each
+        area. This method needs to be called manually after the last insert
+        operation in order to generate the statistics correctly. Alternatively,
+        it is called by both the print_filter and the save_filter (when saving
+        the filter statistics).
+
+        Returns:
+            The list of a-posteriori inter-set error probability (isep) for the areas.
+        """
+
+        self.area_isep = [0]*(self.num_areas + 1)
+
+        for self.i in range(self.num_areas, 0, -1):
+
+            self.p = 1 - self.area_emersion(self.i)
+            self.p = pow(self.p, self.num_hashes)
+
+            self.area_isep[self.i] = self.p
+
+        del self.p
+
+        return self.area_isep
 
 
     def filter_sparsity(self):
@@ -871,3 +951,37 @@ class sbf:
             return -1
         else:
             return (self.area_cells[self.area] / ((self.area_members[self.area] * self.num_hashes) - self.area_self_collisions[self.area]))
+
+
+    def expected_area_emersion(self, area):
+        """ Computes the expected emersion value for an area.
+
+        Computes the expected emersion value for the input area. The expected
+        value depends only on the filter properties (size, number of hash functions,
+        number of sets and elements, etc.) and not an actual instance of the filter.
+        The emersion indicates how much the values in the cells that maps elements
+        of an area store the area label value (as opposed to a higher value). It
+        is the ratio between the cells actually set to the area label in the filter
+        and the cells that would be theoreticall set to the area label if no
+        collision from higher areas happen.
+
+        Args:
+            area:   the area for which to calculate the emersion value.
+
+        Returns:
+            The expected emersion value (float).
+        """
+
+        self.area = area
+        self.nfill = 0
+
+        for self.i in range(self.area+1, self.num_areas+1):
+                self.nfill += self.area_members[self.i]
+
+        self.p = 1 - (1  / self.num_cells)
+
+        self.p = pow(self.p, (self.num_hashes * self.nfill))
+
+        del self.nfill
+
+        return self.p
