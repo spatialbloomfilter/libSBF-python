@@ -9,7 +9,7 @@ Spatial Bloom Filters have been first proposed for use in location-privacy appli
 
 The libSBF-python repository contains the Python implementation of the SBF data structure. The SBF class is provided, as well as various methods for managing the filter:
 - once the filter is constructed, the user can insert elements into it through the `insert` method. The `check` method, on the contrary, is used to verify weather an element belongs to one of the mapped sets. Two additional methods, `insert_from_file` and `check_from_file` can be used to insert and check elements from a CSV file.
-- methods `filter_sparsity`, `filter_fpp`, `compute_area_fpp`, `compute_apriori_area_fpp`, `compute_apriori_area_isep` and `area_emersion` allow to compute and return several probabilistic properties of the constructed filter.
+- methods such as `filter_sparsity`, `filter_fpp`, `compute_area_fpp`, `compute_apriori_area_fpp`, `compute_area_isep`, `compute_apriori_area_isep`, `expected_area_emersion` and `area_emersion` allow to compute and return several probabilistic properties of the constructed filter.
 - finally, two methods are provided to print out the filter: `print_filter` prints the filter and related statistics to the standard output, whereas `save_filter` writes the filter onto a CSV file.
 
 For more details on the implementation, and how to use the library please refer to the [homepage](http://sbf.csr.unibo.it/ "SBF project homepage") of the project.
