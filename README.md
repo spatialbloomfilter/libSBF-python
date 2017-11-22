@@ -12,6 +12,8 @@ The libSBF-python repository contains the Python implementation of the SBF data 
 - methods such as `filter_sparsity`, `filter_fpp`, `compute_area_fpp`, `compute_apriori_area_fpp`, `compute_area_isep`, `compute_apriori_area_isep`, `expected_area_emersion` and `area_emersion` allow to compute and return several probabilistic properties of the constructed filter.
 - finally, two methods are provided to print out the filter: `print_filter` prints the filter and related statistics to the standard output, whereas `save_filter` writes the filter onto a CSV file.
 
+Additionally, a separate set of plotting funtions is provided in `sbfplot`. The provided functions are based on `matplotlib.pyplot` and enable the generation of graphs depicting the probabilistic properties of a generated filter, including emersion and safeness, as well as false positive probability and inter-set error probability.
+
 For more details on the implementation, and how to use the library please refer to the [homepage](http://sbf.csr.unibo.it/ "SBF project homepage") of the project.
 
 The library and the test application can be tested using the [sample datasets](https://github.com/spatialbloomfilter/libSBF-testdatasets "libSBF-testdatasets") provided in a separate repository.
