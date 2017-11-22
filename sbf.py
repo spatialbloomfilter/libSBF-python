@@ -3,7 +3,7 @@
     Copyright (C) 2017  Luca Calderoni, Dario Maio,
                         University of Bologna
     Copyright (C) 2017  Paolo Palmieri,
-                        Cranfield University
+                        University College Cork
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published by
@@ -25,6 +25,7 @@ import numpy as np
 import base64
 import csv
 from sys import byteorder
+from datetime import datetime
 
 
 class sbf:
@@ -150,6 +151,8 @@ class sbf:
         # false positive probability for each area
         # (initialized in the method compute_area_fpp)
         #self.area_fpp = [0]*(self.num_areas + 1)
+        # list of file from which elements have been inserted
+        self.insert_file_list = []
 
 
     def __del__(self):
@@ -306,6 +309,8 @@ class sbf:
             self.dataset_reader = csv.reader(self.dataset_file, delimiter = self.dataset_delimiter)
             for self.row in self.dataset_reader:
                 self.insert(self.row[1], int(self.row[0]))
+
+        self.insert_file_list.append(self.dataset_path)
 
         del self.dataset_delimiter
         del self.dataset_path
@@ -538,6 +543,12 @@ class sbf:
         if (self.mode not in [0,1]):
                     raise AttributeError("Invalid mode.")
 
+        self.expected_area_cells()
+        self.compute_area_fpp()
+        self.compute_apriori_area_fpp()
+        self.compute_apriori_area_isep()
+        self.compute_area_isep()
+
         print('\nSpatial Bloom Filter stats:')
         print('---------------------------')
         print('Hash details:')
@@ -549,6 +560,7 @@ class sbf:
         print(' - Filter sparsity: ' + str('{:.{prec}f}'.format(round(self.filter_sparsity(), self.precision), prec=self.precision)))
         print(' - Filter a-priori fpp: ' + str('{:.{prec}f}'.format(round(self.filter_apriori_fpp(), self.precision), prec=self.precision)))
         print(' - Filter fpp: ' + str('{:.{prec}f}'.format(round(self.filter_fpp(), self.precision), prec=self.precision)))
+        print(' - Filter a-priori safeness probability: ' + str('{:.{prec}f}'.format(round(self.safeness, self.precision), prec=self.precision)))
         print(' - Number of mapped elements: ' + str(self.members))
         print(' - Number of hash collisions: ' + str(self.collisions))
 
@@ -565,21 +577,16 @@ class sbf:
         print('\n')
         print('Area properties:')
         print('----------------')
-        self.expected_area_cells()
         for self.j in range(1, self.num_areas + 1):
             self.potential_elements = (self.area_members[self.j] * self.num_hashes) - self.area_self_collisions[self.j]
             print('Area ' + str(self.j).rjust(len(str(self.num_areas))) + ': ' \
                   + str(self.area_members[self.j]) + ' members, ' \
-                  + str('{:.{prec}f}'.format(round(self.area_expected_cells[self.j], self.precision), prec=self.precision)) + ' expected cells, ' \
+                  + str(round(self.area_expected_cells[self.j])) + ' expected cells, ' \
                   + str(self.area_cells[self.j]) + ' cells out of ' \
                   + str(self.potential_elements) + ' potential (' \
                   + str(self.area_self_collisions[self.j]) + ' self-collisions)')
 
         print('\nEmersion, FPP and ISEP:\n')
-        self.compute_area_fpp()
-        self.compute_apriori_area_fpp()
-        self.compute_apriori_area_isep()
-        self.compute_area_isep()
         for self.j in range(1, self.num_areas + 1):
             print('Area ' + str(self.j).rjust(len(str(self.num_areas))) + \
                   ': expected emersion ' + str('{:.{prec}f}'.format(round(self.expected_area_emersion(self.j), self.precision), prec=self.precision)) + \
@@ -588,14 +595,15 @@ class sbf:
                   ', fpp ' + str('{:.{prec}f}'.format(round(self.area_fpp[self.j], self.precision), prec=self.precision)) + \
                   ', a-priori isep ' + str('{:.{prec}f}'.format(round(self.area_apriori_isep[self.j], self.precision), prec=self.precision)) + \
                   ', expected ise ' + str('{:.{prec}f}'.format(round((self.area_apriori_isep[self.j] * self.area_members[self.j]), self.precision), prec=self.precision)) + \
-                  ', isep ' + str('{:.{prec}f}'.format(round(self.area_isep[self.j], self.precision), prec=self.precision)))
+                  ', isep ' + str('{:.{prec}f}'.format(round(self.area_isep[self.j], self.precision), prec=self.precision)) + \
+                  ', a-priori safep ' + str('{:.{prec}f}'.format(round(self.area_apriori_safep[self.j], self.precision), prec=self.precision)))
 
         del self.j
         del self.mode
         del self.potential_elements
 
 
-    def save_filter(self, filter_path, mode, precision = 5):
+    def save_filter(self, mode, filter_path = '', precision = 5):
         """ Saves the filter and related statistics onto a CSV file.
 
         Saves to disk the filter or its statistics (according to the specified
@@ -614,15 +622,24 @@ class sbf:
             OSError:        The file cannot be created.
         """
 
-        self.filter_path = filter_path
         self.mode = mode
+        self.filter_path = filter_path
         self.precision = precision
+
+        if (self.filter_path == ''):
+            self.filter_path = 'sbf-stats-' + datetime.now().strftime("%Y%m%d-%H%M%S") + '.csv'
 
         # Tries to load the hash salts from the specified file
         try:
             with open(self.filter_path, 'w') as self.filter_file:
 
                 if (self.mode == 0):
+
+                    self.compute_area_fpp()
+                    self.compute_apriori_area_fpp()
+                    self.compute_apriori_area_isep()
+                    self.compute_area_isep()
+                    self.expected_area_cells()
 
                     self.filter_file.write("hash_family" + ";" + self.hash_family + "\n")
                     self.filter_file.write("hash_number" + ";" + str(self.num_hashes) + "\n")
@@ -636,19 +653,15 @@ class sbf:
                     self.filter_file.write("sparsity" + ";" + str('{:.{prec}f}'.format(round(self.filter_sparsity(), self.precision), prec=self.precision)) + "\n")
                     self.filter_file.write("a-priori fpp" + ";" + str('{:.{prec}f}'.format(round(self.filter_apriori_fpp(), self.precision), prec=self.precision)) + "\n")
                     self.filter_file.write("fpp" + ";" + str('{:.{prec}f}'.format(round(self.filter_fpp(), self.precision), prec=self.precision)) + "\n")
-                    self.filter_file.write("area;members;expected cells;self-collisions;cells;expected emersion;emersion;a-priori fpp;fpp;a-priori isep;expected ise;isep\n")
+                    self.filter_file.write("a-priori safeness probability" + ";" + str('{:.{prec}f}'.format(round(self.safeness, self.precision), prec=self.precision)) + "\n")
+                    self.filter_file.write("area;members;expected cells;self-collisions;cells;expected emersion;emersion;a-priori fpp;fpp;a-priori isep;expected ise;isep;a-priori safep\n")
 
                     # area-related parameters:
                     # area, members, expected cells, self-collisions, cells, expected emersion, emersion, apriori_fpp, fpp, apriori_isep, expected ise, isep
-                    self.compute_area_fpp()
-                    self.compute_apriori_area_fpp()
-                    self.compute_apriori_area_isep()
-                    self.compute_area_isep()
-                    self.expected_area_cells()
                     for self.j in range(1, self.num_areas+1):
                         self.filter_file.write(str(self.j) + ";" + \
                                                str(self.area_members[self.j]) + ";" + \
-                                               str('{:.{prec}f}'.format(round(self.area_expected_cells[self.j], self.precision), prec=self.precision)) + ";" + \
+                                               str(round(self.area_expected_cells[self.j])) + ";" + \
                                                str(self.area_self_collisions[self.j]) + ";" + \
                                                str(self.area_cells[self.j]) + ";" + \
                                                str('{:.{prec}f}'.format(round(self.expected_area_emersion(self.j), self.precision), prec=self.precision)) + ";" + \
@@ -657,7 +670,8 @@ class sbf:
                                                str('{:.{prec}f}'.format(round(self.area_fpp[self.j], self.precision), prec=self.precision)) + ";" + \
                                                str('{:.{prec}f}'.format(round(self.area_apriori_isep[self.j], self.precision), prec=self.precision)) + ";" + \
                                                str('{:.{prec}f}'.format(round((self.area_apriori_isep[self.j] * self.area_members[self.j]), self.precision), prec=self.precision)) + ";" + \
-                                               str('{:.{prec}f}'.format(round(self.area_isep[self.j], self.precision), prec=self.precision)) + "\n")
+                                               str('{:.{prec}f}'.format(round(self.area_isep[self.j], self.precision), prec=self.precision)) + ";" + \
+                                               str('{:.{prec}f}'.format(round(self.area_apriori_safep[self.j], self.precision), prec=self.precision)) + "\n")
 
                     del self.j
 
@@ -818,25 +832,35 @@ class sbf:
         """
 
         self.area_apriori_isep = [0]*(self.num_areas + 1)
+        self.area_apriori_safep = [0]*(self.num_areas + 1)
+        self.safeness = 1
 
         for self.i in range(self.num_areas, 0, -1):
 
             self.nfill = 0
-            self.p = 0
+            self.p1 = 0
+            self.p2 = 0
 
             for self.j in range(self.i+1, self.num_areas+1):
                 self.nfill += self.area_members[self.j]
 
-            self.p = 1 - (1  / self.num_cells)
+            self.p1 = 1 - (1  / self.num_cells)
 
-            self.p = 1 - pow(self.p, (self.num_hashes * self.nfill))
+            self.p1 = 1 - pow(self.p1, (self.num_hashes * self.nfill))
 
-            self.p = pow(self.p, self.num_hashes)
+            self.p1 = pow(self.p1, self.num_hashes)
 
-            self.area_apriori_isep[self.i] = self.p
+            self.p2 = 1 - self.p1
+            self.p2 = pow(self.p2, self.area_members[self.i])
+
+            self.safeness *= self.p2
+
+            self.area_apriori_isep[self.i] = self.p1
+            self.area_apriori_safep[self.i] = self.p2
 
         del self.nfill
-        del self.p
+        del self.p1
+        del self.p2
         del self.i
         del self.j
 
